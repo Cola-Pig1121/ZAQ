@@ -1,0 +1,177 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Kawaii color scheme with sky blue as primary */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.28 0 0);
+
+  /* Primary: Sky blue gradient */
+  --primary: oklch(0.57 0.15 264);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Secondary: Cloud white and soft pastels */
+  --secondary: oklch(0.97 0.02 264);
+  --secondary-foreground: oklch(0.28 0 0);
+
+  /* Accent colors: Sakura pink and lavender */
+  --accent: oklch(0.73 0.15 330);
+  --accent-foreground: oklch(0.28 0 0);
+
+  /* Kawaii soft colors */
+  --card: oklch(0.98 0.01 264);
+  --card-foreground: oklch(0.28 0 0);
+
+  --muted: oklch(0.94 0.01 264);
+  --muted-foreground: oklch(0.56 0 0);
+
+  --destructive: oklch(0.62 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(0.93 0.01 264);
+  --input: oklch(0.98 0.01 264);
+  --ring: oklch(0.57 0.15 264);
+
+  --chart-1: oklch(0.57 0.15 264);
+  --chart-2: oklch(0.73 0.15 330);
+  --chart-3: oklch(0.68 0.15 150);
+  --chart-4: oklch(0.75 0.12 40);
+  --chart-5: oklch(0.65 0.15 280);
+
+  --radius: 1.5rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.28 0 0);
+  --sidebar-primary: oklch(0.57 0.15 264);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.73 0.15 330);
+  --sidebar-accent-foreground: oklch(0.28 0 0);
+  --sidebar-border: oklch(0.93 0.01 264);
+  --sidebar-ring: oklch(0.57 0.15 264);
+}
+
+.dark {
+  --background: oklch(0.15 0 0);
+  --foreground: oklch(0.95 0 0);
+  --primary: oklch(0.65 0.12 260);
+  --primary-foreground: oklch(0.15 0 0);
+  --secondary: oklch(0.25 0.01 264);
+  --secondary-foreground: oklch(0.95 0 0);
+  --accent: oklch(0.68 0.12 330);
+  --accent-foreground: oklch(0.15 0 0);
+  --card: oklch(0.2 0.01 264);
+  --card-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.3 0.01 264);
+  --muted-foreground: oklch(0.7 0 0);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.3 0.01 264);
+  --input: oklch(0.25 0.01 264);
+  --ring: oklch(0.65 0.12 260);
+  --sidebar: oklch(0.2 0.01 264);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.65 0.12 260);
+  --sidebar-primary-foreground: oklch(0.95 0 0);
+  --sidebar-accent: oklch(0.68 0.12 330);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.3 0.01 264);
+  --sidebar-ring: oklch(0.65 0.12 260);
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 8px);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 8px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-gradient-to-br from-blue-50 via-white to-purple-50 text-foreground min-h-screen;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gradient-to-b from-blue-300 to-purple-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gradient-to-b from-blue-400 to-purple-400;
+}
+
+/* Glass morphism effect */
+.glass {
+  @apply backdrop-blur-lg bg-white/70 border border-white/20 shadow-xl;
+}
+
+.glass-dark {
+  @apply backdrop-blur-lg bg-slate-900/70 border border-slate-700/20 shadow-xl;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
+}
+
+/* Hover effects */
+.hover-lift {
+  @apply transition-all duration-300 hover:transform hover:-translate-y-1 hover:shadow-lg;
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold px-6 py-2 rounded-full hover:shadow-lg transition-all duration-300 hover:from-blue-600 hover:to-purple-600;
+}
+
+.btn-secondary {
+  @apply bg-white text-slate-700 font-semibold px-6 py-2 rounded-full border border-slate-200 hover:bg-slate-50 transition-all duration-300;
+}
+
+.btn-ghost {
+  @apply text-slate-600 hover:text-slate-800 hover:bg-slate-100 px-4 py-2 rounded-full transition-all duration-300;
+}
