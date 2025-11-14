@@ -149,8 +149,8 @@ export default function ImageUploader({
     }
   }
 
-  const handleMediaLibrarySelect = (url: string) => {
-    const updatedImages = [...images, url]
+  const handleMediaLibrarySelect = (file: { url: string; name: string }) => {
+    const updatedImages = [...images, file.url]
     setImages(updatedImages)
     onImagesChange(updatedImages)
     setIsMediaLibraryOpen(false)
