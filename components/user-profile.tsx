@@ -39,13 +39,35 @@ export default function UserProfile() {
 
   const fetchProfile = async () => {
     try {
-      // 获取当前用户ID
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      // 获取用户资料
+      console.log("开始获取用户资料...")
+      
+      // 使用自定义认证系统获取当前用户
+      const { isAuthenticated, getCurrentUser } = await import('../lib/auth')
+      
+      if (!isAuthenticated()) {
+        console.log("用户未登录")
+        return
+      }
+      
+      const currentUser = getCurrentUser()
+      console.log("当前用户:", currentUser)
+      
+      if (!currentUser) {
+        console.log("无法获取当前用户信息")
+        return
+      }
+      
+      // 从数据库获取用户资料
       const profiles = await profileService.getAllProfiles()
-      const userProfile = profiles.find(p => p.id === parseInt(user.id))
+      console.log("数据库中的所有用户资料:", profiles)
+      
+      // 查找当前用户的资料 - 优先使用用户名匹配
+      let userProfile = profiles.find(profile => 
+        profile.name === currentUser.name || 
+        profile.id === currentUser.id
+      )
+      
+      console.log("找到的用户资料:", userProfile)
       
       if (userProfile) {
         setProfile(userProfile)
@@ -54,6 +76,27 @@ export default function UserProfile() {
           birth: userProfile.birth || ""
         })
         setAvatarUrl(userProfile.avatar || "")
+      } else {
+        console.log("未找到匹配的用户资料，创建新的用户资料...")
+        // 创建一个默认用户资料
+        const newProfile = await profileService.upsertProfile({
+          name: currentUser.name || "默认用户",
+          avatar: "",
+          birth: ""
+        })
+        console.log("创建的新用户资料:", newProfile)
+        
+        // 确保newProfile存在
+        if (newProfile) {
+          setProfile(newProfile)
+          setFormData({
+            name: newProfile.name || "",
+            birth: newProfile.birth || ""
+          })
+          setAvatarUrl(newProfile.avatar || "")
+        } else {
+          console.error("创建用户资料失败")
+        }
       }
     } catch (error) {
       console.error("获取用户资料失败:", error)
@@ -137,19 +180,21 @@ export default function UserProfile() {
       setIsSaving(true)
       
       // 生成唯一文件名
-      const fileName = `avatar-${profile.id}-${Date.now()}`
+      const fileExt = avatarFile.name.split('.').pop()
+      const fileName = `avatar-${profile.id}-${Date.now()}.${fileExt}`
       
-      // 上传到Supabase Storage
+      // 上传到Supabase Storage的media存储桶中的avatars文件夹
+      const filePath = `avatars/${fileName}`
       const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, avatarFile)
+        .from('media')  // 使用 'media' 存储桶而不是 'avatars'
+        .upload(filePath, avatarFile)
       
       if (error) throw error
       
       // 获取公共URL
       const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName)
+        .from('media')  // 使用 'media' 存储桶
+        .getPublicUrl(filePath)
       
       // 更新用户资料中的头像URL
       await profileService.upsertProfile({
@@ -157,10 +202,13 @@ export default function UserProfile() {
         avatar: publicUrl
       })
       
-      setAvatarUrl(publicUrl)
+      // 添加时间戳参数以避免浏览器缓存
+      const timestampedUrl = `${publicUrl}?t=${Date.now()}`
+      
+      setAvatarUrl(timestampedUrl)
       setProfile({
         ...profile,
-        avatar: publicUrl
+        avatar: timestampedUrl
       })
       
       setIsAvatarDialogOpen(false)
@@ -170,7 +218,7 @@ export default function UserProfile() {
       alert("头像上传成功")
     } catch (error) {
       console.error("上传头像失败:", error)
-      alert("上传头像失败")
+      alert("上传头像失败: " + (error as Error).message)
     } finally {
       setIsSaving(false)
     }

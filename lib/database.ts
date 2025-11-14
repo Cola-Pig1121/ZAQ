@@ -1,5 +1,6 @@
 import { supabase, Profile, Post, Discussion } from './supabase'
 import bcrypt from 'bcryptjs'
+import { afterDatabaseOperation } from './cache-manager'
 
 // 导出类型，以便其他组件可以使用
 export type { Profile, Post, Discussion } from './supabase'
@@ -57,6 +58,9 @@ export const profileService = {
       return null
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('update', 'profile')
+
     return data
   },
 
@@ -92,6 +96,9 @@ export const profileService = {
       return false
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('update', 'profile')
+
     return true
   },
 
@@ -121,6 +128,9 @@ export const profileService = {
       console.error('Error deleting profile:', error)
       return false
     }
+
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('delete', 'profile')
 
     return true
   }
@@ -172,6 +182,9 @@ export const postService = {
       return null
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('create', 'post')
+
     return data
   },
 
@@ -189,6 +202,9 @@ export const postService = {
       return null
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('update', 'post')
+
     return data
   },
 
@@ -203,6 +219,9 @@ export const postService = {
       console.error('Error deleting post:', error)
       return false
     }
+
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('delete', 'post')
 
     return true
   },
@@ -249,6 +268,9 @@ export const postService = {
       const { data: { publicUrl } } = supabase.storage
         .from(bucketName)
         .getPublicUrl(filePath)
+
+      // 使用新的缓存管理系统
+      afterDatabaseOperation('create', 'media')
 
       return publicUrl
     } catch (error) {
@@ -304,6 +326,9 @@ export const discussionService = {
       return null
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('create', 'comment')
+
     return data
   },
 
@@ -321,6 +346,9 @@ export const discussionService = {
       return null
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('update', 'comment')
+
     return data
   },
 
@@ -335,6 +363,9 @@ export const discussionService = {
       console.error('Error deleting discussion:', error)
       return false
     }
+
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('delete', 'comment')
 
     return true
   }
@@ -371,6 +402,9 @@ export async function getMediaFiles(folder?: string): Promise<{name: string, url
       })
     )
     
+    // 使用新的缓存管理系统
+    // 读取操作不需要清除缓存，所以不调用afterDatabaseOperation
+    
     return filesWithUrls
   } catch (error) {
     console.error("获取媒体文件失败:", error)
@@ -397,9 +431,34 @@ export async function getMediaFolders(): Promise<string[]> {
       .filter(item => !item.id)
       .map(item => item.name)
     
+    // 使用新的缓存管理系统
+    // 读取操作不需要清除缓存，所以不调用afterDatabaseOperation
+    
     return folders
   } catch (error) {
     console.error("获取媒体文件夹失败:", error)
     return []
+  }
+}
+
+// 删除媒体文件
+export async function deleteMediaFile(fileName: string, folder?: string): Promise<boolean> {
+  try {
+    // 构建完整的文件路径
+    const filePath = folder ? `${folder}/${fileName}` : fileName
+    
+    const { error } = await supabase.storage
+      .from('media')
+      .remove([filePath])
+    
+    if (error) throw error
+    
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('delete', 'media')
+    
+    return true
+  } catch (error) {
+    console.error("删除媒体文件失败:", error)
+    return false
   }
 }

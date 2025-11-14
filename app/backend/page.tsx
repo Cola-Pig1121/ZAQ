@@ -22,6 +22,7 @@ export default function BackendLogin() {
       const result = await login(username, password)
 
       if (result.success) {
+        console.log("登录成功，准备跳转到仪表板")
         // 登录成功，跳转到仪表板
         router.push("/backend/dashboard")
       } else {

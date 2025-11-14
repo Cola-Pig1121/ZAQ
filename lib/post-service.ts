@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { getUserIP } from './ip-utils'
 import { cacheUtils, CACHE_KEYS } from './cache'
+import { afterDatabaseOperation } from './cache-manager'
 
 export interface Post {
   id: number
@@ -169,10 +170,10 @@ export async function createPost(postData: CreatePostData): Promise<Post> {
     comments: []
   }
 
-  // 清除缓存，强制下次获取最新数据
-  cacheUtils.setPosts([]) // 清除缓存
+  // 使用新的缓存管理系统
+  afterDatabaseOperation('create', 'post')
 
-  console.log('创建帖子成功，已清除缓存')
+  console.log('创建帖子成功，已清除缓存并保留点赞状态')
   return newPost
 }
 
@@ -235,6 +236,10 @@ export async function deletePost(id: string): Promise<boolean> {
       }
     }
     
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('delete', 'post')
+    
+    console.log('删除帖子成功，已清除缓存并保留点赞状态')
     return true
   } catch (error) {
     console.error("删除帖子失败:", error)
@@ -295,6 +300,9 @@ export async function createComment(postId: number, content: string, authorName:
       throw error
     }
 
+    // 使用新的缓存管理系统
+    afterDatabaseOperation('create', 'comment')
+
     return data
   } catch (error) {
     console.error('创建评论异常:', (error as Error).message || error, '详细信息:', error)
@@ -332,6 +340,9 @@ export async function deleteComment(commentId: number): Promise<void> {
     console.error('删除评论失败:', error)
     throw error
   }
+
+  // 使用新的缓存管理系统
+  afterDatabaseOperation('delete', 'comment')
 }
 
 // 取消点赞帖子

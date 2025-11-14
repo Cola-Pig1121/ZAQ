@@ -51,10 +51,12 @@ export async function login(username: string, password: string): Promise<{ succe
     
     // 登录成功，存储会话
     localStorage.setItem(AUTH_KEY, "true")
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ id: user.id, name: user.name }))
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ id: user.id, name: user.name || username }))
     localStorage.setItem(AUTH_TIME_KEY, Date.now().toString())
     
-    return { success: true, user: { id: user.id, name: user.name || "" } }
+    console.log("登录成功，用户信息:", { id: user.id, name: user.name || username })
+    
+    return { success: true, user: { id: user.id, name: user.name || username } }
   } catch (error) {
     console.error('Login error:', error)
     return { success: false, error: "登录过程中发生错误" }

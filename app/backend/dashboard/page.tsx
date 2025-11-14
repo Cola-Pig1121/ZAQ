@@ -16,16 +16,48 @@ import UserProfile from "@/components/user-profile"
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [activeTab, setActiveTab] = useState("posts")
+  const [isInitializing, setIsInitializing] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    const currentUser = getCurrentUser()
-    setUser(currentUser)
+    const initializeApp = async () => {
+      try {
+        
+        // 获取当前用户
+        const currentUser = getCurrentUser()
+        console.log("当前用户:", currentUser)
+        
+        if (!currentUser) {
+          console.log("未找到当前用户，重定向到登录页面")
+          router.push("/backend")
+          return
+        }
+        
+        setUser(currentUser)
+      } catch (error) {
+        console.error("初始化应用失败:", error)
+      } finally {
+        setIsInitializing(false)
+      }
+    }
+    
+    initializeApp()
   }, [])
 
   const handleLogout = () => {
     logout()
     router.push("/backend")
+  }
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">正在初始化系统...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
