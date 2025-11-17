@@ -519,6 +519,9 @@ export default function UserProfile() {
       {/* 图片预览弹窗 */}
       <Dialog open={isImagePreviewOpen} onOpenChange={setIsImagePreviewOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] bg-white/95 backdrop-blur-md border-slate-200 shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="sr-only">图片预览</DialogTitle>
+          </DialogHeader>
           <div className="flex flex-col items-center justify-center p-4">
             <img 
               src={previewImageUrl} 

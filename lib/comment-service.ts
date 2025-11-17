@@ -75,6 +75,25 @@ export async function updateComment(id: number, content: string): Promise<Commen
 
 // 删除评论
 export async function deleteComment(id: number): Promise<void> {
+  // 先删除所有子评论
+  const { data: childComments, error: fetchError } = await supabase
+    .from('discussions')
+    .select('id')
+    .eq('dis_id', id)
+
+  if (fetchError) {
+    console.error('获取子评论失败:', fetchError)
+    throw fetchError
+  }
+
+  // 如果有子评论，递归删除
+  if (childComments && childComments.length > 0) {
+    for (const childComment of childComments) {
+      await deleteComment(childComment.id)
+    }
+  }
+
+  // 删除当前评论
   const { error } = await supabase
     .from('discussions')
     .delete()

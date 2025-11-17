@@ -1,80 +1,70 @@
 /**
- * 缓存管理工具
- * 用于在数据库更改后清除缓存，同时保留点赞状态
+ * 简化的缓存管理工具
+ * 仅保留点赞状态和登录状态的管理
  */
 
-import { cacheUtils } from './cache'
+import { likeCache, authCache } from './cache'
 
-// 保留点赞状态并清除其他所有缓存
+// 保留点赞状态并清除其他所有缓存（现在是空操作）
 export function preserveLikesAndClearCache() {
-  try {
-    // 1. 保存点赞状态
-    const likedPosts = JSON.parse(localStorage.getItem('likedPosts') || '{}')
-    
-    // 2. 清除所有缓存
-    cacheUtils.clearAll()
-    
-    // 3. 恢复点赞状态
-    localStorage.setItem('likedPosts', JSON.stringify(likedPosts))
-    
-    console.log('已清除所有缓存，并保留点赞状态')
-  } catch (error) {
-    console.error('清除缓存时出错:', error)
-  }
+  console.log('缓存系统已简化，仅保留点赞和登录状态')
+  // 由于我们已经移除了其他缓存，这里不需要做任何操作
+  // 点赞状态和登录状态会自动保留
 }
 
-// 清除特定类型的缓存，同时保留点赞状态
+// 清除特定类型的缓存，同时保留点赞状态（现在是空操作）
 export function preserveLikesAndClearSpecificCache(cacheKeys: string[]) {
-  try {
-    // 1. 保存点赞状态
-    const likedPosts = JSON.parse(localStorage.getItem('likedPosts') || '{}')
-    
-    // 2. 清除指定的缓存
-    cacheKeys.forEach(key => {
-      localStorage.removeItem(key)
-    })
-    
-    // 3. 恢复点赞状态
-    localStorage.setItem('likedPosts', JSON.stringify(likedPosts))
-    
-    console.log(`已清除指定缓存 [${cacheKeys.join(', ')}]，并保留点赞状态`)
-  } catch (error) {
-    console.error('清除指定缓存时出错:', error)
-  }
+  console.log(`缓存系统已简化，仅保留点赞和登录状态。尝试清除缓存键: [${cacheKeys.join(', ')}]`)
+  // 由于我们已经移除了其他缓存，这里不需要做任何操作
+  // 点赞状态和登录状态会自动保留
 }
 
-// 数据库操作后调用此函数
+// 数据库操作后调用此函数（现在是空操作）
 export function afterDatabaseOperation(operationType: 'create' | 'update' | 'delete', dataType: 'post' | 'comment' | 'profile' | 'media') {
   console.log(`数据库操作: ${operationType} ${dataType}`)
+  console.log('缓存系统已简化，无需清除缓存')
+  // 由于我们已经移除了其他缓存，这里不需要做任何操作
+  // 点赞状态和登录状态会自动保留
+}
+
+// 点赞状态管理
+export const likeManager = {
+  // 获取所有点赞状态
+  getAllLikedPosts: () => likeCache.getLikedPosts(),
   
-  // 根据操作类型和数据类型决定清除哪些缓存
-  const cacheKeysToClear = []
+  // 检查帖子是否被点赞
+  isPostLiked: (postId: string) => likeCache.isPostLiked(postId),
   
-  // 帖子相关的操作会影响帖子缓存
-  if (dataType === 'post') {
-    cacheKeysToClear.push('posts')
-  }
+  // 切换点赞状态
+  toggleLike: (postId: string) => likeCache.toggleLike(postId),
   
-  // 评论相关的操作会影响帖子缓存（因为评论是帖子的一部分）
-  if (dataType === 'comment') {
-    cacheKeysToClear.push('posts')
-  }
+  // 设置点赞状态
+  setLikeStatus: (postId: string, isLiked: boolean) => likeCache.setLikedPost(postId, isLiked),
   
-  // 用户资料相关的操作会影响用户资料缓存
-  if (dataType === 'profile') {
-    cacheKeysToClear.push('profile')
-  }
+  // 清除所有点赞状态
+  clearAllLikes: () => likeCache.clearLikedPosts()
+}
+
+// 登录状态管理
+export const authManager = {
+  // 获取认证信息
+  getAuth: () => authCache.getAuth(),
   
-  // 媒体文件相关的操作会影响媒体文件缓存
-  if (dataType === 'media') {
-    cacheKeysToClear.push('mediaFiles')
-  }
+  // 设置认证信息
+  setAuth: (authData: any) => authCache.setAuth(authData),
   
-  // 如果有特定的缓存需要清除，使用特定清除方法
-  if (cacheKeysToClear.length > 0) {
-    preserveLikesAndClearSpecificCache(cacheKeysToClear)
-  } else {
-    // 否则清除所有缓存
-    preserveLikesAndClearCache()
-  }
+  // 获取用户信息
+  getUser: () => authCache.getUser(),
+  
+  // 设置用户信息
+  setUser: (userData: any) => authCache.setUser(userData),
+  
+  // 获取登录时间
+  getAuthTime: () => authCache.getAuthTime(),
+  
+  // 设置登录时间
+  setAuthTime: (time: number) => authCache.setAuthTime(time),
+  
+  // 清除所有登录状态
+  clearAuth: () => authCache.clearAuth()
 }

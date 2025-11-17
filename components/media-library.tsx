@@ -45,7 +45,6 @@ import {
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { postService } from "@/lib/database"
-import { cacheUtils, CACHE_KEYS } from "@/lib/cache"
 
 interface MediaFile {
   id: string
@@ -97,20 +96,128 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
     return matchesSearch && matchesCategory
   })
 
-  // 获取媒体文件列表（使用缓存）
+  // 同步Storage中的文件到数据库
+  const syncStorageFiles = async () => {
+    try {
+      setLoading(true)
+      let totalSynced = 0
+      
+      // 首先获取所有分类
+      const { data: categories, error: categoriesError } = await supabase
+        .from('media_categories')
+        .select('*')
+      
+      if (categoriesError) throw categoriesError
+      
+      // 如果没有分类，则使用默认分类
+      const folderCategories = categories && categories.length > 0 
+        ? categories.map(cat => cat.name)
+        : ['images', 'videos', 'audios', 'documents', 'others']
+      
+      console.log("正在同步以下文件夹:", folderCategories)
+      
+      // 获取数据库中已有的文件URL列表
+      const { data: dbFiles, error: dbError } = await supabase
+        .from('media_files')
+        .select('url')
+      
+      if (dbError) throw dbError
+      
+      const dbUrls = new Set(dbFiles?.map(f => f.url) || [])
+      
+      // 对每个分类/文件夹进行同步
+      for (const category of folderCategories) {
+        // 获取Storage中的文件
+        const { data: storageFiles, error: storageError } = await supabase.storage
+          .from('media')
+          .list(category, {
+            limit: 100,
+            offset: 0,
+            sortBy: { column: 'created_at', order: 'desc' }
+          })
+        
+        if (storageError) {
+          console.error(`获取 ${category} 文件夹失败:`, storageError)
+          continue
+        }
+        
+        // 找出Storage中有但数据库中没有的文件
+        const filesToSync = (storageFiles || []).filter(storageFile => {
+          const { data: { publicUrl } } = supabase.storage
+            .from('media')
+            .getPublicUrl(`${category}/${storageFile.name}`)
+          
+          return !dbUrls.has(publicUrl)
+        })
+        
+        if (filesToSync.length === 0) {
+          console.log(`${category} 文件夹没有需要同步的文件`)
+          continue
+        }
+        
+        // 将这些文件添加到数据库
+        const syncPromises = filesToSync.map(async (file) => {
+          const { data: { publicUrl } } = supabase.storage
+            .from('media')
+            .getPublicUrl(`${category}/${file.name}`)
+          
+          // 根据分类确定文件类型
+          let fileType = 'unknown'
+          if (category === 'images' || category === '图片') {
+            fileType = file.metadata?.mimetype || 'image/jpeg'
+          } else if (category === 'videos' || category === '视频') {
+            fileType = file.metadata?.mimetype || 'video/mp4'
+          } else if (category === 'audios' || category === '音频') {
+            fileType = file.metadata?.mimetype || 'audio/mpeg'
+          } else if (category === 'documents' || category === '文档') {
+            fileType = file.metadata?.mimetype || 'application/pdf'
+          } else {
+            fileType = file.metadata?.mimetype || 'application/octet-stream'
+          }
+          
+          return supabase
+            .from('media_files')
+            .insert({
+              name: file.name,
+              url: publicUrl,
+              size: file.metadata?.size || 0,
+              type: fileType,
+              category: category
+            })
+            .select()
+            .single()
+        })
+        
+        const syncedFiles = await Promise.all(syncPromises)
+        totalSynced += syncedFiles.length
+        console.log(`${category} 文件夹同步了 ${syncedFiles.length} 个文件`)
+      }
+      
+      // 刷新文件列表
+      await fetchMediaFiles()
+      
+      // 刷新分类列表，确保新同步文件的分类可见，强制刷新缓存
+      await fetchCategories(true)
+      
+      if (totalSynced > 0) {
+        alert(`成功同步 ${totalSynced} 个文件`)
+      } else {
+        alert("没有需要同步的文件")
+      }
+    } catch (error) {
+      console.error("同步文件失败:", error)
+      alert("同步文件失败")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 获取媒体文件列表
   const fetchMediaFiles = async () => {
     try {
       setLoading(true)
       
-      // 先尝试从缓存获取
-      const cachedFiles = cacheUtils.getMediaFiles()
-      if (cachedFiles) {
-        setFiles(cachedFiles)
-        setLoading(false)
-        return
-      }
-
-      // 缓存中没有，从数据库获取
+      // 从数据库获取
       const { data, error } = await supabase
         .from('media_files')
         .select('*')
@@ -118,9 +225,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
 
       if (error) throw error
       setFiles(data || [])
-      
-      // 存入缓存
-      cacheUtils.setMediaFiles(data || [])
     } catch (error) {
       console.error("获取媒体文件失败:", error)
     } finally {
@@ -128,26 +232,44 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
     }
   }
 
-  // 获取分类列表（使用缓存）
-  const fetchCategories = async () => {
+  // 获取分类列表
+  const fetchCategories = async (forceRefresh = false) => {
     try {
-      // 先尝试从缓存获取
-      const cachedCategories = cacheUtils.getMediaCategories()
-      if (cachedCategories) {
-        setCategories(cachedCategories)
-        return
-      }
-
-      // 缓存中没有，从数据库获取
-      const { data, error } = await supabase
+      // 从数据库获取所有已定义的分类
+      const { data: definedCategories, error: categoriesError } = await supabase
         .from('media_categories')
         .select('*')
 
-      if (error) throw error
+      if (categoriesError) throw categoriesError
 
-      // 计算每个分类的文件数量
-      const categories = (data || []).map(category => ({
-        ...category
+      // 获取所有文件中使用的分类
+      const { data: files, error: filesError } = await supabase
+        .from('media_files')
+        .select('category')
+
+      if (filesError) throw filesError
+
+      // 提取所有唯一的分类
+      const allCategoryNames = new Set<string>()
+      
+      // 添加已定义的分类
+      if (definedCategories) {
+        definedCategories.forEach(cat => allCategoryNames.add(cat.name))
+      }
+      
+      // 添加文件中使用的分类
+      if (files) {
+        files.forEach(file => {
+          if (file.category) {
+            allCategoryNames.add(file.category)
+          }
+        })
+      }
+
+      // 转换为分类对象数组
+      const categories = Array.from(allCategoryNames).map(name => ({
+        id: name,
+        name: name
       }))
 
       // 添加"全部"分类
@@ -157,9 +279,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
       ]
 
       setCategories(allCategories)
-      
-      // 存入缓存
-      cacheUtils.setMediaCategories(allCategories)
     } catch (error) {
       console.error("获取分类失败:", error)
     }
@@ -204,9 +323,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
       const uploadedFiles = await Promise.all(uploadPromises)
       const newFiles = [...uploadedFiles, ...files]
       setFiles(newFiles)
-
-      // 更新缓存
-      cacheUtils.setMediaFiles(newFiles)
 
       // 更新分类计数
       fetchCategories()
@@ -254,9 +370,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
       const newFiles = files.filter(f => f.id !== file.id)
       setFiles(newFiles)
 
-      // 更新缓存
-      cacheUtils.setMediaFiles(newFiles)
-
       // 更新分类计数
       fetchCategories()
     } catch (error) {
@@ -291,9 +404,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
       const newFiles = files.map(f => f.id === file.id ? { ...f, name: editFileName.trim() } : f)
       setFiles(newFiles)
 
-      // 更新缓存
-      cacheUtils.setMediaFiles(newFiles)
-
       setEditingFile(null)
       setEditFileName("")
     } catch (error) {
@@ -323,9 +433,6 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
 
       const newCategories = [...categories, { ...data, count: 0 }]
       setCategories(newCategories)
-
-      // 更新缓存
-      cacheUtils.setMediaCategories(newCategories)
 
       setNewCategoryName("")
       setIsCreateCategoryOpen(false)
@@ -382,6 +489,10 @@ export function MediaLibrary({ className, onSelectImage, mode = 'full' }: MediaL
 
             {mode === 'full' && (
               <div className="flex gap-2">
+                <Button variant="outline" onClick={syncStorageFiles} disabled={loading} className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  同步文件
+                </Button>
                 <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
                   <DialogTrigger asChild>
                     <Button className="flex items-center gap-2">

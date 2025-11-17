@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react'
 import PostCard from "./post-card"
 import { getAllPosts, likePost, unlikePost, createComment, deleteComment, Post } from "@/lib/post-service"
+import { getUserIP } from "@/lib/ip-utils"
 
 
 export default function PostFeed() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [userIP, setUserIP] = useState<string>('')
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -21,7 +23,17 @@ export default function PostFeed() {
       }
     }
 
+    const fetchUserIP = async () => {
+      try {
+        const ip = await getUserIP()
+        setUserIP(ip)
+      } catch (error) {
+        console.error("Error fetching user IP:", error)
+      }
+    }
+
     fetchPosts()
+    fetchUserIP()
   }, [])
 
   // 处理点赞逻辑 - 为PostCard组件提供API
@@ -118,6 +130,7 @@ export default function PostFeed() {
             onComment={handleComment}
             onDeleteComment={handleDeleteComment}
             onReplyComment={handleReplyComment}
+            userIP={userIP}
           />
         ))
       )}

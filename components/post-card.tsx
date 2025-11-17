@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react"
 import { Icon } from '@iconify/react'
 
-// 从 database.ts 导入 Post 类型和 supabase 客户端
-import { Post } from "@/lib/database"
+// 从 post-service 导入 Post 类型和 supabase 客户端
+import { Post } from "@/lib/post-service"
 import { supabase } from "@/lib/supabase"
-import { cacheUtils, CACHE_KEYS } from "@/lib/cache"
 import {
   Dialog,
   DialogContent,
@@ -16,14 +15,21 @@ import {
 
 interface PostCardProps {
   post: Post
-  isOwner?: boolean
   onLike: (postId: number) => void
   onComment: (postId: number, content: string, author?: string) => void
-  onDeleteComment?: (commentId: number) => void
-  onReplyComment?: (postId: number, content: string, author?: string, parentId?: number) => void
+  onDeleteComment: (commentId: number) => void
+  onReplyComment: (postId: number, content: string, author?: string, parentId?: number) => void
+  userIP?: string
 }
 
-export default function PostCard({ post, onLike, onComment, onDeleteComment, onReplyComment }: PostCardProps) {
+export default function PostCard({ 
+  post, 
+  onLike, 
+  onComment, 
+  onDeleteComment, 
+  onReplyComment,
+  userIP 
+}: PostCardProps) {
   const [showComments, setShowComments] = useState(false)
   const [isLiked, setIsLiked] = useState(false)
   const [isLiking, setIsLiking] = useState(false)
@@ -43,21 +49,10 @@ export default function PostCard({ post, onLike, onComment, onDeleteComment, onR
     setIsLiked(likedPosts[post.id] || false)
   }, [post.id])
 
-  // 从缓存或数据库查询媒体文件信息
+  // 从数据库查询媒体文件信息
   const fetchMediaFileInfo = async (url: string): Promise<string | undefined> => {
     try {
-      // 先尝试从缓存获取媒体文件列表
-      const cachedMediaFiles = cacheUtils.getMediaFiles()
-      
-      if (cachedMediaFiles) {
-        // 从缓存中查找匹配的文件
-        const mediaFile = cachedMediaFiles.find((file: any) => file.url === url)
-        if (mediaFile) {
-          return mediaFile.name
-        }
-      }
-
-      // 缓存中没有，从数据库查询
+      // 从数据库查询
       const { data, error } = await supabase
         .from('media_files')
         .select('name')
@@ -74,6 +69,12 @@ export default function PostCard({ post, onLike, onComment, onDeleteComment, onR
       console.error('查询媒体文件信息失败:', error)
       return undefined
     }
+  }
+
+  // 检查用户是否可以删除评论
+  const canDeleteComment = (comment: any): boolean => {
+    if (!userIP || !comment.ip) return false
+    return comment.ip === userIP
   }
 
   // 处理删除评论
@@ -218,6 +219,34 @@ export default function PostCard({ post, onLike, onComment, onDeleteComment, onR
     放松: "bg-gradient-to-r from-blue-400 to-indigo-400",
   }
 
+  // 组织评论的层级结构
+  const organizeComments = (comments: any[]) => {
+    if (!comments || comments.length === 0) return []
+    
+    // 创建评论映射，方便查找
+    const commentMap: { [key: number]: any } = {}
+    comments.forEach(comment => {
+      commentMap[comment.id] = { ...comment, replies: [] }
+    })
+    
+    // 分离顶级评论和子评论
+    const topLevelComments: any[] = []
+    comments.forEach(comment => {
+      if (comment.dis_id === null || comment.dis_id === 0) {
+        // 顶级评论
+        topLevelComments.push(commentMap[comment.id])
+      } else {
+        // 子评论
+        const parentComment = commentMap[comment.dis_id]
+        if (parentComment) {
+          parentComment.replies.push(commentMap[comment.id])
+        }
+      }
+    })
+    
+    return topLevelComments
+  }
+
   // 获取文件类型
   const getFileType = (url: string): string => {
     if (!url) return 'image'
@@ -228,6 +257,111 @@ export default function PostCard({ post, onLike, onComment, onDeleteComment, onR
     if (extension && videoExtensions.includes(extension)) return 'video'
     if (extension && audioExtensions.includes(extension)) return 'audio'
     return 'image'
+  }
+
+  // 递归渲染评论和子评论
+  const renderComment = (comment: any, level: number = 0) => {
+    const marginLeft = level > 0 ? `${level * 20}px` : '0'
+    
+    return (
+      <div key={comment.id} className="bg-slate-50 rounded-lg p-3" style={{ marginLeft }}>
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            {comment.author_name ? comment.author_name.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-800">{comment.author_name || "用户"}</p>
+                <span className="text-xs text-slate-400">{timeAgo(new Date(comment.created_at))}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleReplyComment(comment.id)}
+                  className="p-1 rounded-full text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+                  title="回复"
+                >
+                  <Icon icon="lucide:reply" className="w-3 h-3" />
+                </button>
+                {canDeleteComment(comment) && (
+                  <button
+                    onClick={() => handleDeleteComment(comment.id)}
+                    className="p-1 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    title="删除"
+                  >
+                    <Icon icon="lucide:trash-2" className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-slate-700 leading-relaxed">{comment.content}</p>
+            
+            {/* Reply Input */}
+            {replyingTo === comment.id && (
+              <div className="mt-2 space-y-2">
+                {/* 用户名输入 */}
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {replyAuthor ? replyAuthor.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <input
+                    type="text"
+                    value={replyAuthor}
+                    onChange={(e) => setReplyAuthor(e.target.value)}
+                    placeholder="请输入您的名字（必填）"
+                    className="flex-1 px-3 py-1 rounded-full bg-white text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-300 border border-slate-200 focus:border-transparent text-sm"
+                  />
+                </div>
+                
+                {/* 回复内容输入 */}
+                <div className="flex gap-2">
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {replyAuthor ? replyAuthor.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <input
+                    type="text"
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && handleSubmitReply()}
+                    placeholder="回复这条评论..."
+                    className="flex-1 px-3 py-1.5 rounded-full bg-white text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-300 border border-slate-200 focus:border-transparent text-sm"
+                  />
+                  <button
+                    onClick={handleSubmitReply}
+                    className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold hover:shadow-lg transition-all duration-300 hover:from-blue-600 hover:to-purple-600"
+                  >
+                    <Icon icon="lucide:send" className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setReplyingTo(null)
+                      setReplyError("")
+                    }}
+                    className="px-3 py-1.5 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
+                  >
+                    取消
+                  </button>
+                </div>
+                
+                {/* 错误提示 */}
+                {replyError && (
+                  <div className="text-red-500 text-sm ml-8">
+                    {replyError}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* 递归渲染子评论 */}
+        {comment.replies && comment.replies.length > 0 && (
+          <div className="mt-2 space-y-2">
+            {comment.replies.map((reply: any) => renderComment(reply, level + 1))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -370,100 +504,18 @@ export default function PostCard({ post, onLike, onComment, onDeleteComment, onR
       </div>
 
       {/* Comments Section */}
-      {(showComments || post.comments && post.comments.length > 0) && (
-        <div className="mt-3 space-y-3 pt-3 border-t border-slate-100">
-          {post.comments && post.comments.map((comment: any) => (
-            <div key={comment.id} className="bg-slate-50 rounded-lg p-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                  {comment.author_name ? comment.author_name.charAt(0).toUpperCase() : 'U'}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-slate-800">{comment.author_name || "用户"}</p>
-                      <span className="text-xs text-slate-400">{timeAgo(new Date(comment.created_at))}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleReplyComment(comment.id)}
-                        className="p-1 rounded-full text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                        title="回复"
-                      >
-                        <Icon icon="lucide:reply" className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteComment(comment.id)}
-                        className="p-1 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                        title="删除"
-                      >
-                        <Icon icon="lucide:trash-2" className="w-3 h-3" />
-                      </button>
-                    </div>
+                {showComments && (
+                  <div className="mt-4 border-t border-slate-100 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">评论 ({post.comments?.length || 0})</h3>
+                    
+                    {/* Comments List */}
+                    {post.comments && post.comments.length > 0 && (
+                      <div className="space-y-3">
+                        {organizeComments(post.comments).map(comment => renderComment(comment))}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm text-slate-700 leading-relaxed">{comment.content}</p>
-                  
-                  {/* Reply Input */}
-                  {replyingTo === comment.id && (
-                    <div className="mt-2 space-y-2">
-                      {/* 用户名输入 */}
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {replyAuthor ? replyAuthor.charAt(0).toUpperCase() : 'U'}
-                        </div>
-                        <input
-                          type="text"
-                          value={replyAuthor}
-                          onChange={(e) => setReplyAuthor(e.target.value)}
-                          placeholder="请输入您的名字（必填）"
-                          className="flex-1 px-3 py-1 rounded-full bg-white text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-300 border border-slate-200 focus:border-transparent text-sm"
-                        />
-                      </div>
-                      
-                      {/* 回复内容输入 */}
-                      <div className="flex gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-pink-300 to-purple-300 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {replyAuthor ? replyAuthor.charAt(0).toUpperCase() : 'U'}
-                        </div>
-                        <input
-                          type="text"
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          onKeyPress={(e) => e.key === "Enter" && handleSubmitReply()}
-                          placeholder="回复这条评论..."
-                          className="flex-1 px-3 py-1.5 rounded-full bg-white text-slate-700 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-300 border border-slate-200 focus:border-transparent text-sm"
-                        />
-                        <button
-                          onClick={handleSubmitReply}
-                          className="px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-semibold hover:shadow-lg transition-all duration-300 hover:from-blue-600 hover:to-purple-600"
-                        >
-                          <Icon icon="lucide:send" className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setReplyingTo(null)
-                            setReplyError("")
-                          }}
-                          className="px-3 py-1.5 rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
-                        >
-                          取消
-                        </button>
-                      </div>
-                      
-                      {/* 错误提示 */}
-                      {replyError && (
-                        <div className="text-red-500 text-sm ml-8">
-                          {replyError}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                )}
 
       {/* Comment Input */}
       {showCommentInput && (

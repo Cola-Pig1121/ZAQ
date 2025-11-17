@@ -1,7 +1,6 @@
 import { supabase } from './supabase'
 import { getUserIP } from './ip-utils'
-import { cacheUtils, CACHE_KEYS } from './cache'
-import { afterDatabaseOperation } from './cache-manager'
+import { likeManager } from './cache-manager'
 
 export interface Post {
   id: number
@@ -11,6 +10,7 @@ export interface Post {
   images: string[] | null
   author?: string // 从 profile 表获取的作者名称
   comments?: Comment[] // 从 discussions 表获取的评论
+  isLiked?: boolean // 用户是否已点赞此帖子
 }
 
 export interface Comment {
@@ -28,17 +28,8 @@ export interface CreatePostData {
   images?: string[]
 }
 
-// 获取所有帖子（使用缓存）
+// 获取所有帖子
 export async function getAllPosts(): Promise<Post[]> {
-  // 尝试从缓存获取数据
-  const cachedPosts = cacheUtils.getPosts()
-  if (cachedPosts) {
-    console.log('从缓存获取帖子数据')
-    // 将缓存数据转换为Post格式返回
-    return cachedPosts as Post[]
-  }
-
-  console.log('从数据库获取帖子数据')
   // 获取所有帖子
   const { data: posts, error: postsError } = await supabase
     .from('posts')
@@ -74,21 +65,23 @@ export async function getAllPosts(): Promise<Post[]> {
   }
 
   // 为每个帖子添加作者信息和评论
-  const postsWithDetails = (posts || []).map(post => ({
-    ...post,
-    author: authorProfile?.name || '未知作者',
-    comments: (allComments || []).filter(comment => comment.post_id === post.id)
-  }))
-
-  // 缓存数据
-  cacheUtils.setPosts(postsWithDetails as any[])
+  const postsWithDetails = (posts || []).map(post => {
+    // 检查用户是否已点赞此帖子
+    const isLiked = likeManager.isPostLiked(post.id.toString())
+    
+    return {
+      ...post,
+      author: authorProfile?.name || '未知作者',
+      comments: (allComments || []).filter(comment => comment.post_id === post.id),
+      isLiked // 添加点赞状态
+    }
+  })
 
   return postsWithDetails
 }
 
 // 获取单个帖子
 export async function getPostById(id: number): Promise<Post | null> {
-  // 获取帖子信息
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select('*')
@@ -129,17 +122,21 @@ export async function getPostById(id: number): Promise<Post | null> {
     throw commentsError
   }
 
+  // 检查用户是否已点赞此帖子
+  const isLiked = likeManager.isPostLiked(id.toString())
+
   // 构建包含作者和评论的帖子对象
   const postWithDetails: Post = {
     ...post,
     author: authorProfile?.name || '未知作者',
-    comments: comments || []
+    comments: comments || [],
+    isLiked // 添加点赞状态
   }
 
   return postWithDetails
 }
 
-// 创建新帖子（并更新缓存）
+// 创建新帖子
 export async function createPost(postData: CreatePostData): Promise<Post> {
   const { data, error } = await supabase
     .from('posts')
@@ -167,13 +164,11 @@ export async function createPost(postData: CreatePostData): Promise<Post> {
   const newPost: Post = {
     ...data,
     author: authorProfile?.name || '未知作者',
-    comments: []
+    comments: [],
+    isLiked: false // 新帖子默认未点赞
   }
 
-  // 使用新的缓存管理系统
-  afterDatabaseOperation('create', 'post')
-
-  console.log('创建帖子成功，已清除缓存并保留点赞状态')
+  console.log('创建帖子成功')
   return newPost
 }
 
@@ -236,10 +231,10 @@ export async function deletePost(id: string): Promise<boolean> {
       }
     }
     
-    // 使用新的缓存管理系统
-    afterDatabaseOperation('delete', 'post')
+    // 从点赞状态中移除此帖子
+    likeManager.setLikeStatus(id, false)
     
-    console.log('删除帖子成功，已清除缓存并保留点赞状态')
+    console.log('删除帖子成功')
     return true
   } catch (error) {
     console.error("删除帖子失败:", error)
@@ -274,6 +269,9 @@ export async function likePost(id: number): Promise<Post> {
     throw error
   }
 
+  // 更新点赞状态
+  likeManager.setLikeStatus(id.toString(), true)
+
   return data
 }
 
@@ -299,9 +297,6 @@ export async function createComment(postId: number, content: string, authorName:
       console.error('创建评论失败:', error.message || error, '详细信息:', error)
       throw error
     }
-
-    // 使用新的缓存管理系统
-    afterDatabaseOperation('create', 'comment')
 
     return data
   } catch (error) {
@@ -340,9 +335,6 @@ export async function deleteComment(commentId: number): Promise<void> {
     console.error('删除评论失败:', error)
     throw error
   }
-
-  // 使用新的缓存管理系统
-  afterDatabaseOperation('delete', 'comment')
 }
 
 // 取消点赞帖子
@@ -374,6 +366,9 @@ export async function unlikePost(id: number): Promise<Post> {
     console.error('取消点赞失败:', error)
     throw error
   }
+
+  // 更新点赞状态
+  likeManager.setLikeStatus(id.toString(), false)
 
   return data
 }
